@@ -286,101 +286,10 @@ int checkLocationRadius(struct mover currentMover) {
     return -1;
 }
 
-void trailLED(int trailStart = FLASH_PIXEL_COUNT, int trailEnd = PIXEL_COUNT, struct colorRGB trailColor = {4, 4, 4}) {
-    int i;
-    //colorRGB flashColor = {0, 10, 10};
-/*    
-    if (start > end) {
-        for(i = end; i >= start; i -= 3) {
-            turnLEDOn(i, i, flashColor, false);
-            strip.show();
-            delay(50);
-            if (!pixelStatus[i]) turnLEDOff(i, i);
-            strip.show();
-            delay(50);
-            turnLEDOn(i + 1, i + 1, flashColor, false);
-            strip.show();
-            delay(50);
-            if (!pixelStatus[i + 1]) turnLEDOff(i + 1, i + 1);
-            strip.show();
-            delay(50);
-        }
-    } else {
-    */
-    /*
-        for(i = trailStart; i <= trailEnd; i += 3) {
-            turnLEDOn(i, i, flashColor, false);
-            strip.show();
-            delay(50);
-            if (!pixelStatus[i]) turnLEDOff(i, i);
-            strip.show();
-            delay(50);
-            i = i + 2;
-            turnLEDOn(i, i, flashColor, false);
-            strip.show();
-            delay(50);
-            if (!pixelStatus[i]) turnLEDOff(i, i);
-            strip.show();
-            delay(50);
-        }
-        */
-        int swirlDelay = 1;
-        
-        int move = 3;
-        
-        int dist = abs(trailStart - trailEnd);
-        int dir = trailStart > trailEnd ? -1 : 1;
-
-        int current = 0;
-
-        while (current != dist) {
-            int j = trailStart + current * dir * move;
-
-            if (j > PIXEL_COUNT) j = FLASH_PIXEL_COUNT + current % 50;
-            if (j <= FLASH_PIXEL_COUNT) j = PIXEL_COUNT - (FLASH_PIXEL_COUNT - j);
-            
-            turnLEDOn(j, j, trailColor, 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j, j, pixelStatus[j], 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j + dir, j + dir, trailColor, 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j + dir, j + dir, pixelStatus[j + dir], 10, false);
-            strip.show();
-            delay(swirlDelay);
-
-            current = current + dir;
-        }
-/*
-        for(int t = trailStart; i < trailEnd; i += move * dir) {
-            int j = i;
-            if (i > PIXEL_COUNT) j = FLASH_PIXEL_COUNT + i % 50;
-            if (i < FLASH_PIXEL_COUNT) j = PIXEL_COUNT - i;
-
-            turnLEDOn(j, j, trailColor, 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j, j, pixelStatus[j], 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j + dir, j + dir, trailColor, 10, false);
-            strip.show();
-            delay(swirlDelay);
-            turnLEDOn(j + dir, j + dir, pixelStatus[j + dir], 10, false);
-            strip.show();
-            delay(swirlDelay);
-        }
-        */
-    //}
-}
-
 //MP3 Player Controls - See https://community.particle.io/t/a-great-very-cheap-mp3-sound-module-without-need-for-a-library/20111/23
 void playSound(int intFolder = 0, int intSong = 1) {
     execute_CMD(0x0F, intFolder, intSong); 
-    delay(500);
+    delay(200);
     execute_CMD(0x0D, 0, 0);
 }
 
@@ -498,15 +407,13 @@ int LEDControl(String command) {
 
         if (currentLED != oldLED) {
             currentMoverData->intClockPosition = currentLED;
-            turnMoverLEDOff(getMoverIndex(currentMover));
-            
+
             if (millis() < 10000 || oldLED == 0) {
                 turnLEDOn(currentLED, currentLED, colorCurrent, 10);
             } else {
                 playSound();
-                //if (oldLED) trailLED(oldLED, currentLED);
-                //turnLEDOn(currentLED, currentLED, colorClockDirection);
-            	//innerSwirl(colorClockDirection, 1);
+//              turnMoverLEDOff(getMoverIndex(currentMover));
+                turnLEDOff(oldLED, oldLED, 10);
         	    innerFlash(colorClockDirection, 500);
                 turnLEDOn(currentLED, currentLED, colorCurrent, 10);
         	    flashNotification(colorCurrent, 3);
@@ -543,9 +450,9 @@ void setup() {
 	
 	//MP3 player initialization
     Serial1.begin(9600);
-    delay(500);
+    delay(200);
     execute_CMD(0x3F, 0, 0);
-    delay(500);
+    delay(200);
     setVolume(1);
 
     //Hard-code the rotten dogs
