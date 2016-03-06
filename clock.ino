@@ -425,7 +425,7 @@ void setup() {
 	
 	//MP3 player initialization
     Serial1.begin(9600);
-    mp3_set_volume(1);
+    mp3_set_volume(15);
 
     //Hard-code the rotten dogs
 	LEDControl("Max|Holiday");
@@ -517,11 +517,13 @@ void mp3_send_cmd (uint8_t cmd) {
 void mp3_set_volume (uint16_t volume) {
     volume = constrain(volume, 0, 0x30);
 	mp3_send_cmd (0x06, volume);
+	delay(500);
 }
 
 //Play current track
 void mp3_play () {
 	mp3_send_cmd (0x0d);
+	delay(500);
 }
 
 //0x0F specify mp3 folder num (00-99) and within that file num (000-255) on SD card
@@ -529,5 +531,5 @@ void mp3_seek (uint8_t folder, uint8_t file) {
     folder = constrain(folder,0,99);
     file = constrain(file,0,255);
 	mp3_send_cmd (0x0F, folder, file);
-    delay(100);
+    delay(500);
 }
