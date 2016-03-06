@@ -23,12 +23,7 @@
 #define PHOTO A0
 #define POWER A1
 
-//MP3 Player
-# define Start_Byte 0x7E
-# define Version_Byte 0xFF
-# define Command_Length 0x06
-# define End_Byte 0xEF
-# define Acknowledge 0x00
+uint8_t send_buf[] = {0x7E, 0xFF, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0xEF};  //this is the standard command message template
 
 struct colorRGB {
     int R;
@@ -51,6 +46,7 @@ struct location {
     String posLat;
     String posLong;
     double radius; //in miles
+    uint8_t soundIndex;
 } location;
 
 struct mover movers[] {
@@ -64,14 +60,14 @@ struct mover movers[] {
 };
 
 struct location locations[] {
-    "Home", 2, 10, 10, 10, "37.088567", "-76.420840", 0.25,
-    "Work", 1, 0, 10, 10, "37.070425", "-76.368069", 0.5,
-    "Work", 1, 0, 10, 10, "37.062589", "-76.495912", 1.0,
-    "Traveling", 0, 30, 0, 20, "", "", 0,
-    "Holiday", 3, 0, 10, 0, "", "", 0,
-    "Unknown", 4, 10, 10, 0, "", "", 0,
-    "Mortal Peril", 5, 20, 0, 0, "", "", 0,
-    "Default", 4, 10, 10, 0, "", "", 0 //Final Entry is default (Unknown again)
+    "Home", 2, 10, 10, 10, "37.088567", "-76.420840", 0.25, 1,
+    "Work", 1, 0, 10, 10, "37.070425", "-76.368069", 0.5, 1,
+    "Work", 1, 0, 10, 10, "37.062589", "-76.495912", 1.0, 1,
+    "Traveling", 0, 30, 0, 20, "", "", 0, 1,
+    "Holiday", 3, 0, 10, 0, "", "", 0, 1,
+    "Unknown", 4, 10, 10, 0, "", "", 0, 1,
+    "Mortal Peril", 5, 20, 0, 0, "", "", 0, 2,
+    "Default", 4, 10, 10, 0, "", "", 0, 1 //Final Entry is default (Unknown again)
 };
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
@@ -286,27 +282,6 @@ int checkLocationRadius(struct mover currentMover) {
     return -1;
 }
 
-//MP3 Player Controls - See https://community.particle.io/t/a-great-very-cheap-mp3-sound-module-without-need-for-a-library/20111/23
-void playSound(int intFolder = 0, int intSong = 1) {
-    execute_CMD(0x0F, intFolder, intSong); 
-    delay(200);
-    execute_CMD(0x0D, 0, 0);
-}
-
-void setVolume(int volume = 1) {
-    execute_CMD(0x06, 0, volume); // Set the volume (0x00~0x30)
-}
-
-void execute_CMD(byte CMD, byte Par1, byte Par2) {
-    int16_t checksum = -(Version_Byte + Command_Length + CMD + Acknowledge + Par1 + Par2);
-    
-    byte Command_line[10] = { Start_Byte, Version_Byte, Command_Length, CMD, Acknowledge, Par1, Par2, checksum >> 8, checksum & 0xFF, End_Byte};
-    
-    for (byte k = 0; k < 10; k++) {
-        Serial1.write(Command_line[k]);
-    }
-}
-
 int LEDControl(String command) { 
     char copyStr[64];
     command.toCharArray(copyStr,64);
@@ -348,7 +323,7 @@ int LEDControl(String command) {
 	struct colorRGB colorCurrent;
 	struct colorRGB colorClockDirection;
 	
-    if (Vol > 0) setVolume(Vol);
+    if (Vol > 0) mp3_set_volume(Vol);
 
     colorCurrent = { R, G, B };
     
@@ -411,8 +386,8 @@ int LEDControl(String command) {
             if (millis() < 10000 || oldLED == 0) {
                 turnLEDOn(currentLED, currentLED, colorCurrent, 10);
             } else {
-                playSound();
-//              turnMoverLEDOff(getMoverIndex(currentMover));
+                mp3_seek(1, currentClockLocation.soundIndex);
+                mp3_play();
                 turnLEDOff(oldLED, oldLED, 10);
         	    innerFlash(colorClockDirection, 500);
                 turnLEDOn(currentLED, currentLED, colorCurrent, 10);
@@ -450,10 +425,7 @@ void setup() {
 	
 	//MP3 player initialization
     Serial1.begin(9600);
-    delay(200);
-    execute_CMD(0x3F, 0, 0);
-    delay(200);
-    setVolume(1);
+    mp3_set_volume(1);
 
     //Hard-code the rotten dogs
 	LEDControl("Max|Holiday");
@@ -489,4 +461,73 @@ void startupSwirl() { // outer hands counterclockwise, inner hands clockwise
     	}
 	}
 	
+}
+
+//MP3 Player Functions
+void fill_uint16_bigend (uint8_t *thebuf, uint16_t data) {
+	*thebuf =	(uint8_t)(data>>8);
+	*(thebuf+1) =	(uint8_t)data;
+}
+
+//calc checksum (1~6 byte)
+uint16_t mp3_get_checksum (uint8_t *thebuf) {
+	uint16_t sum = 0;
+	for (int i=1; i<7; i++) {
+		sum += thebuf[i];
+	}
+	return -sum;
+}
+
+//fill checksum to send_buf (7~8 byte)
+void mp3_fill_checksum () {
+	uint16_t checksum = mp3_get_checksum (send_buf);
+	fill_uint16_bigend (send_buf+7, checksum);
+}
+
+//Send to Serial1
+void send_func () {
+	for (int i=0; i<10; i++) {
+		Serial1.write (send_buf[i]);    //assumed use of Serial1 port
+	}
+}
+
+//package send buffer with command, 2 arguments, checksum and send
+void mp3_send_cmd (uint8_t cmd, uint8_t dh, uint8_t dl) {
+	send_buf[3] = cmd;
+	send_buf[5] = dh;
+	send_buf[6] = dl;
+	mp3_fill_checksum ();
+	send_func ();
+}
+//package send buffer with command, 1 argument, checksum and send
+void mp3_send_cmd (uint8_t cmd, uint16_t arg) {
+	send_buf[3] = cmd;
+	fill_uint16_bigend ((send_buf+5), arg);
+	mp3_fill_checksum ();
+	send_func ();
+}
+//package send buffer with command, no arguments, checksum and send
+void mp3_send_cmd (uint8_t cmd) {
+	send_buf[3] = cmd;
+	fill_uint16_bigend ((send_buf+5), 0);
+	mp3_fill_checksum ();
+	send_func ();
+}
+
+void mp3_set_volume (uint16_t volume) {
+    volume = constrain(volume, 0, 0x30);
+	mp3_send_cmd (0x06, volume);
+}
+
+//Play current track
+void mp3_play () {
+	mp3_send_cmd (0x0d);
+}
+
+//0x0F specify mp3 folder num (00-99) and within that file num (000-255) on SD card
+void mp3_seek (uint8_t folder, uint8_t file) {
+    folder = constrain(folder,0,99);
+    file = constrain(file,0,255);
+	mp3_send_cmd (0x0F, folder, file);
+    delay(100);
 }
